@@ -5,10 +5,13 @@
 #  10   11   Distributed under MIT License
 
 from typing import Collection
+import numpy as np
 
 from .node import Node
+
 from .random import gxgp_random
 from .utils import arity
+
 
 __all__ = ['DagGP']
 
@@ -21,7 +24,7 @@ class DagGP:
         else:
             self._variables = [Node(t) for t in variables]
         if isinstance(constants, int):
-            self._constants = [Node(gxgp_random.random()) for i in range(constants)]
+            self._constants = [Node(gxgp_random.randint(0, constants)) for i in range(constants)]
         else:
             self._constants = [Node(t) for t in constants]
 
@@ -44,12 +47,11 @@ class DagGP:
         if variable_names:
             names = variable_names
         else:
-            names = [DagGP.default_variable(i) for i in range(len(X[0]))]
+            names = [DagGP.default_variable(i) for i in range(X.shape[0])]
+        kwargs = {name: X[i] for i, name in enumerate(names)}
+        y_pred = individual(**kwargs)
+        return np.asarray(y_pred)
 
-        y_pred = list()
-        for row in X:
-            y_pred.append(individual(**{n: v for n, v in zip(names, row)}))
-        return y_pred
 
     @staticmethod
     def plot_evaluate(individual: Node, X, variable_names=None):
@@ -58,11 +60,13 @@ class DagGP:
         y_pred = DagGP.evaluate(individual, X, variable_names)
         plt.figure()
         plt.title(individual.long_name)
-        plt.scatter([x[0] for x in X], y_pred)
+        plt.scatter(X[0], y_pred)
 
         return y_pred
 
     @staticmethod
     def mse(individual: Node, X, y, variable_names=None):
         y_pred = DagGP.evaluate(individual, X, variable_names)
-        return sum((a - b) ** 2 for a, b in zip(y, y_pred)) / len(y)
+        if not np.all(np.isfinite(y_pred)):
+            return float('inf')
+        return np.mean(np.square(y - y_pred))

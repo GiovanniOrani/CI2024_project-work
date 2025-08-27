@@ -10,15 +10,21 @@ from typing import Callable
 
 from .draw import draw
 from .utils import arity
+from enum import Enum
 
-__all__ = ['Node']
+__all__ = ['Node', 'NodeType']
 
+class NodeType(Enum):
+    FUNCTION = 1
+    CONSTANT = 2
+    VARIABLE = 3
 
 class Node:
     _func: Callable
     _successors: tuple['Node']
     _arity: int
     _str: str
+    _type: NodeType
 
     def __init__(self, node=None, successors=None, *, name=None):
         if callable(node):
@@ -27,6 +33,8 @@ class Node:
                 return node(*_args)
 
             self._func = _f
+            self._type = NodeType.FUNCTION
+            
             self._successors = tuple(successors)
             self._arity = arity(node)
             assert self._arity is None or len(tuple(successors)) == self._arity, (
@@ -44,11 +52,13 @@ class Node:
                 self._str = node.__name__
         elif isinstance(node, numbers.Number):
             self._func = eval(f'lambda **_kw: {node}')
+            self._type = NodeType.CONSTANT
             self._successors = tuple()
             self._arity = 0
             self._str = f'{node:g}'
         elif isinstance(node, str):
             self._func = eval(f'lambda *, {node}, **_kw: {node}')
+            self._type = NodeType.VARIABLE
             self._successors = tuple()
             self._arity = 0
             self._str = str(node)
@@ -62,11 +72,25 @@ class Node:
         return self.long_name
 
     def __len__(self):
-        return 1 + sum(len(c) for c in self._successors)
+        visited = set()
+        stack = [self]
+        while stack:
+            n = stack.pop()
+            if n in visited:
+                continue
+            visited.add(n)
+            for c in n._successors:
+                if c not in visited:
+                    stack.append(c)
+        return len(visited)
 
     @property
     def value(self):
         return self()
+    
+    @property
+    def type(self):
+        return self._type
 
     @property
     def arity(self):
@@ -113,4 +137,6 @@ class Node:
 def _get_subtree(bunch: set, node: Node):
     bunch.add(node)
     for c in node._successors:
+        if c in bunch:
+            continue
         _get_subtree(bunch, c)
